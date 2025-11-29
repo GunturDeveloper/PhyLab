@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Simulasi Optik Fisika</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    .ray { transition: all 0.2s ease; }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Optik Fisika - Lensa Tipis</h1>
+    <p class="text-gray-400">Drag benda (panah biru) untuk mengubah jarak benda</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">Jenis Lensa</label>
+          <select id="lensType" class="w-full bg-gray-700 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500">
+            <option value="convex">Lensa Cembung (+)</option>
+            <option value="concave">Lensa Cekung (-)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Jarak Fokus (f) = <span id="fVal">20</span> cm</label>
+          <input type="range" id="focalLength" min="10" max="50" value="20" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Jarak Benda (s) = <span id="sVal">40</span> cm</label>
+          <input type="range" id="objectDistance" min="5" max="100" value="40" class="w-full hidden" disabled>
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Hasil Perhitungan</h3>
+          <div><span class="text-gray-400">Jarak Bayangan (s')</span>: <span id="sPrime" class="font-mono text-green-400">40 cm</span></div>
+          <div><span class="text-gray-400">Perbesaran (M)</span>: <span id="magnification" class="font-mono text-yellow-400">-1×</span></div>
+          <div><span class="text-gray-400">Sifat Bayangan</span>: <span id="imageType" class="font-mono text-pink-400">Nyata, Terbalik, Sama Besar</span></div>
+        </div>
+
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset Posisi
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gray-950 relative overflow-hidden">
+      <canvas id="opticsCanvas" class="w-full h-full"></canvas>
+      
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-500"></div> Benda</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-500"></div> Bayangan</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-yellow-400"></div> Sinar istimewa</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('opticsCanvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+
+// Resize canvas
+function resize() {
+  width = canvas.width = canvas.clientWidth;
+  height = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Variabel fisika (dalam cm, akan diskalakan ke pixel)
+let focalLength = 20;      // f
+let objectDistance = 40;   // s (positif jika di kiri lensa)
+let lensType = 'convex';   // convex / concave
+
+const scale = 5; // 1 cm = 5 pixel (disesuaikan agar muat di layar)
+
+let isDragging = false;
+let dragX = 0;
+
+// Elemen DOM
+const fSlider = document.getElementById('focalLength');
+const fVal = document.getElementById('fVal');
+const sVal = document.getElementById('sVal');
+const sPrimeEl = document.getElementById('sPrime');
+const magEl = document.getElementById('magnification');
+const typeEl = document.getElementById('imageType');
+const lensSelect = document.getElementById('lensType');
+const resetBtn = document.getElementById('resetBtn');
+
+// Hitung ulang semua nilai
+function calculate() {
+  const f = lensType === 'convex' ? focalLength : -focalLength;
+  
+  // Rumus lensa: 1/f = 1/s + 1/s'
+  let sPrime = 0;
+  if (Math.abs(f) > 0.001 && objectDistance !== f) {
+    sPrime = 1 / (1/f - 1/objectDistance);
+  }
+
+  const M = -sPrime / objectDistance; // Perbesaran linear
+
+  // Update UI
+  fVal.textContent = focalLength;
+  sVal.textContent = objectDistance.toFixed(1);
+  if (!isFinite(sPrime)) {
+    sPrimeEl.textContent = '∞ (tak terhingga)';
+    magEl.textContent = '—';
+    typeEl.textContent = 'Tidak terbentuk bayangan';
+  } else {
+    sPrimeEl.textContent = sPrime.toFixed(1) + ' cm';
+    magEl.textContent = M.toFixed(2) + '×';
+
+    let sifat = '';
+    if (sPrime > 0) sifat += 'Nyata, ';
+    else sifat += 'Maya, ';
+
+    if (M < 0) sifat += 'Terbalik, ';
+    else sifat += 'Tegak, ';
+
+    if (Math.abs(M) > 1) sifat += 'Diperbesar';
+    else if (Math.abs(M) < 1) sifat += 'Diperkecil';
+    else sifat += 'Sama Besar';
+
+    typeEl.textContent = sifat;
+  }
+
+  // Simpan nilai untuk gambar
+  window.sPrime = sPrime;
+  window.M = M;
+}
+
+// Gambar seluruh diagram
+function draw() {
+  ctx.clearRect(0, 0, width, height);
+
+  const centerY = height / 2;
+  const lensX = width / 2;
+
+  // Sumbu optik
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, centerY);
+  ctx.lineTo(width, centerY);
+  ctx.stroke();
+
+  // Titik fokus kiri & kanan
+  const f = lensType === 'convex' ? focalLength : -focalLength;
+  const F1x = lensX - f * scale;
+  const F2x = lensX + Math.abs(f) * scale;
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('F', F1x - 10, centerY + 20);
+  ctx.fillText('F', F2x - 10, centerY + 20);
+
+  // Gambar lensa
+  ctx.strokeStyle = '#60a5fa';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  if (lensType === 'convex') {
+    ctx.moveTo(lensX, centerY - 100);
+    ctx.quadraticCurveTo(lensX + 30, centerY, lensX, centerY + 100);
+    ctx.moveTo(lensX, centerY - 100);
+    ctx.quadraticCurveTo(lensX - 30, centerY, lensX, centerY + 100);
+  } else {
+    ctx.moveTo(lensX, centerY - 100);
+    ctx.quadraticCurveTo(lensX - 30, centerY, lensX, centerY + 100);
+    ctx.moveTo(lensX, centerY - 100);
+    ctx.quadraticCurveTo(lensX + 30, centerY, lensX, centerY + 100);
+  }
+  ctx.stroke();
+
+  // Benda (panah biru)
+  const objectX = lensX - objectDistance * scale;
+  const objectHeight = 60 * Math.min(1, 50/objectDistance); // tinggi mengecil kalau jauh
+  ctx.fillStyle = '#3b82f6';
+  ctx.beginPath();
+  ctx.moveTo(objectX, centerY);
+  ctx.lineTo(objectX, centerY - objectHeight);
+  ctx.lineTo(objectX + 15, centerY - objectHeight);
+  ctx.lineTo(objectX + 15, centerY - objectHeight - 20);
+  ctx.lineTo(objectX + 30, centerY - objectHeight + 10);
+  ctx.lineTo(objectX + 15, centerY - objectHeight + 40);
+  ctx.lineTo(objectX + 15, centerY - objectHeight + 20);
+  ctx.lineTo(objectX, centerY - objectHeight + 20);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bayangan (jika ada)
+  if (window.sPrime !== undefined && isFinite(window.sPrime)) {
+    const imageX = lensX + window.sPrime * scale;
+    const imageHeight = objectHeight * Math.abs(window.M);
+    ctx.fillStyle = window.sPrime > 0 ? '#ef4444' : '#f87171';
+    ctx.globalAlpha = window.sPrime > 0 ? 1 : 0.6;
+    ctx.beginPath();
+    ctx.moveTo(imageX, centerY);
+    if (window.M < 0) {
+      ctx.lineTo(imageX, centerY + imageHeight);
+      ctx.lineTo(imageX + 15, centerY + imageHeight);
+      ctx.lineTo(imageX + 15, centerY + imageHeight + 20);
+      ctx.lineTo(imageX + 30, centerY + imageHeight - 10);
+      ctx.lineTo(imageX + 15, centerY + imageHeight - 40);
+      ctx.lineTo(imageX + 15, centerY + imageHeight - 20);
+      ctx.lineTo(imageX, centerY + imageHeight - 20);
+    } else {
+      ctx.lineTo(imageX, centerY - imageHeight);
+      ctx.lineTo(imageX + 15, centerY - imageHeight);
+      ctx.lineTo(imageX + 15, centerY - imageHeight - 20);
+      ctx.lineTo(imageX + 30, centerY - imageHeight + 10);
+      ctx.lineTo(imageX + 15, centerY - imageHeight + 40);
+      ctx.lineTo(imageX + 15, centerY - imageHeight + 20);
+      ctx.lineTo(imageX, centerY - imageHeight + 20);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Sinar istimewa (kuning)
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+
+  // 1. Sinar sejajar sumbu optik → lewat fokus
+  ctx.beginPath();
+  ctx.moveTo(objectX, centerY - objectHeight);
+  ctx.lineTo(lensX, centerY - objectHeight * 0.6);
+  if (lensType === 'convex') {
+    ctx.lineTo(F2x + 100, centerY - objectHeight * 0.6 + (F2x - lensX));
+  } else {
+    ctx.lineTo(0, centerY - objectHeight * 0.6 - (lensX - F1x));
+  }
+  ctx.stroke();
+
+  // 2. Sinar melalui pusat lensa (lurus)
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(objectX, centerY - objectHeight);
+  ctx.lineTo(lensX, centerY);
+  if (window.sPrime && isFinite(window.sPrime)) {
+    const imageX = lensX + window.sPrime * scale;
+    const dirY = window.M < 0 ? centerY + objectHeight * Math.abs(window.M) : centerY - objectHeight * Math.abs(window.M);
+    ctx.lineTo(imageX, dirY);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  requestAnimationFrame(draw);
+}
+
+// Event handler
+fSlider.addEventListener('input', (e) => {
+  focalLength = parseInt(e.target.value);
+  calculate();
+});
+
+lensSelect.addEventListener('change', (e) => {
+  lensType = e.target.value;
+  calculate();
+});
+
+resetBtn.addEventListener('click', () => {
+  objectDistance = 40;
+  calculate();
+});
+
+// Drag dengan mouse / touch
+function startDrag(e) {
+  e.preventDefault();
+  isDragging = true;
+}
+
+function moveDrag(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const x = clientX - rect.left;
+  const lensX = width / 2;
+
+  const newDist = (lensX - x) / scale;
+  if (newDist > 5 && newDist < 200) {
+    objectDistance = newDist;
+    sVal.textContent = objectDistance.toFixed(1);
+    calculate();
+  }
+}
+
+function endDrag() {
+  isDragging = false;
+}
+
+canvas.addEventListener('mousedown', startDrag);
+canvas.addEventListener('touchstart', startDrag);
+canvas.addEventListener('mousemove', moveDrag);
+canvas.addEventListener('touchmove', moveDrag);
+canvas.addEventListener('mouseup', endDrag);
+canvas.addEventListener('touchend', endDrag);
+canvas.addEventListener('mouseleave', endDrag);
+
+// Init
+calculate();
+draw();
+</script>
+</body>
+</html>

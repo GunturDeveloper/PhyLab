@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhyLab – Laboratorium Fisika Interaktif</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons CDN CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/phosphor-icons@1.4.2/src/css/phosphor.css">
+  <style>
+    canvas { touch-action: none; }
+    .card {
+      transition: all 0.3s ease;
+      backdrop-filter: blur(12px);
+    }
+    .card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px -10px rgba(6, 182, 212, 0.4);
+      border-color: #06b6d4;
+    }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-3xl font-bold">PhyLab <span class="text-cyan-400 text-xl">By GunturDeveloper</span></h1>
+    <p class="text-gray-400 mt-1">Laboratorium Fisika Interaktif</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <aside class="bg-gray-800 w-full lg:w-80 p-6">
+      <div class="h-full flex flex-col justify-center items-center text-center text-gray-500">
+        <div class="text-6xl mb-4">
+          <i class="ph-lightning-bold"></i>
+        </div>
+        <div class="text-2xl font-bold text-cyan-400">PhyLab</div>
+        <div class="mt-4 text-sm">Pilih simulasi di sebelah kanan →</div>
+      </div>
+    </aside>
+
+    <main class="flex-1 bg-gradient-to-b from-gray-950 to-black p-8 overflow-y-auto">
+      <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+
+        <a href="parabola-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-cyan-500">
+          <div class="text-5xl mb-4"><i class="ph-arrow-up-right-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Gerak Parabola</h3>
+          <p class="text-gray-400 text-sm">Lintasan, jangkauan, tinggi maksimum, energi</p>
+        </a>
+
+        <a href="node-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-purple-500">
+          <div class="text-5xl mb-4"><i class="ph-wave-square-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Gelombang Tali & Standing Wave</h3>
+          <p class="text-gray-400 text-sm">Interferensi, node, antinode, 2 sumber</p>
+        </a>
+
+        <a href="bias-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-red-500">
+          <div class="text-5xl mb-4"><i class="ph-bell-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Pembiasan Cahaya</h3>
+          <p class="text-gray-400 text-sm">Hukum Snell, indeks bias, pembiasan cahaya</p>
+        </a>
+
+        <a href="fluida-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-teal-500">
+          <div class="text-5xl mb-4"><i class="ph-droplet-fill-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Hukum Bernoulli & Fluida</h3>
+          <p class="text-gray-400 text-sm">Tekanan, kecepatan, efek Venturi</p>
+        </a>
+
+        <a href="interferensi-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-indigo-500">
+          <div class="text-5xl mb-4"><i class="ph-lightbulb-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Interferensi Celah Ganda</h3>
+          <p class="text-gray-400 text-sm">Eksperimen Young, pola terang-gelap</p>
+        </a>
+
+        <a href="dispersi-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-green-500">
+          <div class="text-5xl mb-4"><i class="ph-pyramid-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Dispersi Cahaya</h3>
+          <p class="text-gray-400 text-sm">Spektrum warna, prisma, indeks bias</p>
+        </a>
+
+        <a href="difraksi-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-yellow-500">
+          <div class="text-5xl mb-4"><i class="ph-planet-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Difraksi Cahaya</h3>
+          <p class="text-gray-400 text-sm">
+              Gelombang</p>
+        </a>
+
+        <a href="optik-dashboard.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-amber-500">
+          <div class="text-5xl mb-4"><i class="ph-lightning-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">Optik Lensa</h3>
+          <p class="text-gray-400 text-sm">Cermin cekung, dan cembung</p>
+        </a>
+
+        <a href="phygebra.html" class="card bg-gray-800 border border-gray-700 rounded-xl p-8 hover:border-pink-500">
+          <div class="text-5xl mb-4"><i class="ph-chart-line-bold"></i></div>
+          <h3 class="text-xl font-semibold mb-2">MATHGEBRA</h3>
+          <p class="text-gray-400 text-sm">Grafik fungsi matematika</p>
+        </a>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+</body>
+</html>

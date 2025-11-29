@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Difraksi Celah Tunggal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    .glow { filter: drop-shadow(0 0 10px currentColor); }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white font-sans">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Optik Fisika - Difraksi Celah Tunggal</h1>
+    <p class="text-gray-400">Ubah lebar celah dan panjang gelombang untuk melihat pola difraksi</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-5">
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Panjang Gelombang (λ) = <span id="lambdaVal">650</span> nm 
+            <span class="text-xs text-gray-400">(merah)</span>
+          </label>
+          <input type="range" id="lambdaSlider" min="380" max="780" step="5" value="650" class="w-full">
+          <select id="colorPreset" class="mt-2 w-full bg-gray-700 rounded px-3 py-2 text-sm">
+            <option value="650">Merah (650 nm)</option>
+            <option value="590">Jingga (590 nm)</option>
+            <option value="570">Kuning (570 nm)</option>
+            <option value="510">Hijau (510 nm)</option>
+            <option value="475">Biru (475 nm)</option>
+            <option value="445">Nila (445 nm)</option>
+            <option value="420">Ungu (420 nm)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Lebar Celah (a) = <span id="slitVal">0.50</span> mm
+          </label>
+          <input type="range" id="slitSlider" min="0.05" max="2.00" step="0.05" value="0.50" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Jarak ke Layar (L) = <span id="distanceVal">2.00</span> m
+          </label>
+          <input type="range" id="distanceSlider" min="0.5" max="5.0" step="0.1" value="2.0" class="w-full">
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Hasil Perhitungan</h3>
+          <div><span class="text-gray-400">Pola Pusat Lebar</span>: <span id="centralWidth" class="font-mono text-cyan-400">5.2 cm</span></div>
+          <div><span class="text-gray-400">Jarak Pola ke-1</span>: <span id="firstMin" class="font-mono text-yellow-400">±2.6 cm</span></div>
+          <div><span class="text-gray-400">Rasio λ/a</span>: <span id="ratio" class="font-mono text-pink-400">0.0013</span></div>
+          <div><span class="text-gray-400">Keterangan</span>: <span id="info" class="font-mono text-green-400">Difraksi jelas terlihat</span></div>
+        </div>
+
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset Semua
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gradient-to-b from-gray-950 to-black relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-white"></div> Cahaya datang</div>
+        <div class="flex items-center gap-2 glow"><div class="w-4 h-1" id="legendColor"></div> Pola difraksi</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-gray-500"></div> Celah tunggal</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Parameter
+let lambda = 650e-9;      // m
+let slitWidth = 0.50e-3;  // m
+let distance = 2.0;       // m
+let lightColor = '#ef4444';
+
+// DOM Elements
+const lambdaSlider = document.getElementById('lambdaSlider');
+const lambdaVal = document.getElementById('lambdaVal');
+const colorPreset = document.getElementById('colorPreset');
+const slitSlider = document.getElementById('slitSlider');
+const slitVal = document.getElementById('slitVal');
+const distanceSlider = document.getElementById('distanceSlider');
+const distanceVal = document.getElementById('distanceVal');
+const centralWidthEl = document.getElementById('centralWidth');
+const firstMinEl = document.getElementById('firstMin');
+const ratioEl = document.getElementById('ratio');
+const infoEl = document.getElementById('info');
+const legendColor = document.getElementById('legendColor');
+const resetBtn = document.getElementById('resetBtn');
+
+// Warna berdasarkan panjang gelombang
+function wavelengthToColor(l) {
+  const gamma = 0.8;
+  let r, g, b;
+  if (l >= 380 && l < 440) { r = -(l - 440) / (440 - 380); g = 0.0; b = 1.0; }
+  else if (l < 490) { r = 0.0; g = (l - 440) / (490 - 440); b = 1.0; }
+  else if (l < 510) { r = 0.0; g = 1.0; b = -(l - 510) / (510 - 490); }
+  else if (l < 580) { r = (l - 510) / (580 - 510); g = 1.0; b = 0.0; }
+  else if (l < 645) { r = 1.0; g = -(l - 645) / (645 - 580); b = 0.0; }
+  else { r = 1.0; g = 0.0; b = 0.0; }
+  const factor = l < 420 ? 0.3 + 0.7*(l - 380)/(420 - 380) : 1;
+  r = Math.pow(r * factor, gamma);
+  g = Math.pow(g * factor, gamma);
+  b = Math.pow(b * factor, gamma);
+  return `rgb(${Math.round(r*255)}, ${Math.round(g*255)}, ${Math.round(b*255)})`;
+}
+
+// Hitung pola difraksi (rumus sinc²)
+function intensity(theta) {
+  const beta = Math.PI * slitWidth * Math.sin(theta) / lambda;
+  if (Math.abs(beta) < 1e-10) return 1.0;
+  const sinc = Math.sin(beta) / beta;
+  return sinc * sinc;
+}
+
+// Update perhitungan
+function updateCalculations() {
+  lambda = parseFloat(lambdaSlider.value) * 1e-9;
+  slitWidth = parseFloat(slitSlider.value) * 1e-3;
+  distance = parseFloat(distanceSlider.value);
+
+  lightColor = wavelengthToColor(parseFloat(lambdaSlider.value));
+  legendColor.style.backgroundColor = lightColor;
+
+  // Lebar pola pusat (jarak antar minimum pertama)
+  const theta1 = lambda / slitWidth; // rad
+  const y1 = distance * Math.tan(theta1);
+  const centralWidth = (4 * y1 * 100).toFixed(1); // cm
+  const firstOrder = (y1 * 200).toFixed(1); // ± cm
+
+  centralWidthEl.textContent = centralWidth + " cm";
+  firstMinEl.textContent = "±" + firstOrder + " cm";
+  ratioEl.textContent = (lambda / slitWidth).toFixed(4);
+
+  const ratio = lambda / slitWidth;
+  if (ratio > 0.01) {
+    infoEl.textContent = "Celah terlalu lebar → difraksi lemah";
+    infoEl.className = "font-mono text-red-400";
+  } else if (ratio < 0.0001) {
+    infoEl.textContent = "Difraksi sangat kuat!";
+    infoEl.className = "font-mono text-green-400";
+  } else {
+    infoEl.textContent = "Difraksi jelas terlihat";
+    infoEl.className = "font-mono text-yellow-400";
+  }
+}
+
+// Gambar
+function draw() {
+  ctx.clearRect(0, 0, w, h);
+
+  const centerY = h * 0.5;
+  const slitX = w * 0.3;
+  const screenX = w * 0.85;
+
+  // Sumber cahaya & gelombang datang
+  ctx.strokeStyle = lightColor;
+  ctx.lineWidth = 4;
+  for (let i = -10; i <= 10; i++) {
+    const y = centerY + i * 30;
+    ctx.globalAlpha = 0.3 + 0.7 * Math.exp(-Math.abs(i)/5);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(slitX - 50, y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Celah tunggal
+  const slitPixel = slitWidth * 2e6; // skala besar
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(slitX - 200, centerY - 400, 400, 800);
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(slitX - slitPixel/2, centerY - 400, slitPixel, 800);
+
+  // Label celah
+  ctx.fillStyle = '#60a5fa';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`a = ${slitVal.textContent} mm`, slitX, centerY - 420);
+
+  // Layar pengamatan
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(screenX - 10, 0, 20, h);
+  ctx.strokeStyle = '#4b5563';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(screenX - 10, 0, 20, h);
+
+  // Pola difraksi di layar
+  const scaleY = (screenX - slitX) * 0.8 / distance;
+  const patternWidth = 600;
+  const startX = screenX - patternWidth/2;
+
+  for (let px = 0; px < patternWidth; px++) {
+    const x = (px - patternWidth/2) / scaleY;
+    const theta = Math.atan2(x, distance);
+    const I = intensity(theta);
+    const brightness = Math.sqrt(I);
+    const height = 800 * brightness;
+
+    ctx.fillStyle = lightColor;
+    ctx.globalAlpha = 0.8 * brightness;
+    ctx.fillRect(startX + px, centerY - height/2, 1.5, height);
+  }
+  ctx.globalAlpha = 1;
+
+  // Garis pusat
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(slitX, centerY);
+  ctx.lineTo(screenX, centerY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Label jarak
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '14px sans-serif';
+  ctx.fillText(`L = ${distance.toFixed(1)} m`, (slitX + screenX)/2, centerY - 30);
+
+  requestAnimationFrame(draw);
+}
+
+// Event Listeners
+lambdaSlider.addEventListener('input', () => {
+  lambdaVal.textContent = lambdaSlider.value;
+  updateCalculations();
+});
+
+colorPreset.addEventListener('change', () => {
+  lambdaSlider.value = colorPreset.value;
+  lambdaVal.textContent = colorPreset.value;
+  updateCalculations();
+});
+
+slitSlider.addEventListener('input', () => {
+  slitVal.textContent = slitSlider.value;
+  updateCalculations();
+});
+
+distanceSlider.addEventListener('input', () => {
+  distanceVal.textContent = distanceSlider.value;
+  updateCalculations();
+});
+
+resetBtn.addEventListener('click', () => {
+  lambdaSlider.value = 650;
+  slitSlider.value = 0.50;
+  distanceSlider.value = 2.0;
+  colorPreset.value = 650;
+  lambdaVal.textContent = "650";
+  slitVal.textContent = "0.50";
+  distanceVal.textContent = "2.00";
+  updateCalculations();
+});
+
+// Init
+updateCalculations();
+draw();
+</script>
+</body>
+</html>

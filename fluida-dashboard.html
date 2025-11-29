@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Hukum Bernoulli - Fluida Ideal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    .pressure-high { filter: hue-rotate(0deg) saturate(1.5); }
+    .pressure-low { filter: hue-rotate(200deg) saturate(1.8); }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Fluida - Hukum Bernoulli</h1>
+    <p class="text-gray-400">Ubah slider → lihat tekanan, kecepatan, dan tinggi berubah secara real-time!</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar -->
+    <aside class="bg-gray-800 w-full lg:w-96 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-6">
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Debit Aliran (Q) = <span id="Qval">50</span> L/detik
+          </label>
+          <input type="range" id="Q" min="10" max="150" value="50" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Ketinggian Titik 1 (h₁) = <span id="h1val">3.0</span> m
+          </label>
+          <input type="range" id="h1" min="0" max="10" step="0.1" value="3" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Ketinggian Titik 2 (h₂) = <span id="h2val">8.0</span> m
+          </label>
+          <input type="range" id="h2" min="0" max="10" step="0.1" value="8" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Luas Penampang 1 (A₁) = <span id="A1val">100</span> cm²
+          </label>
+          <input type="range" id="A1" min="20" max="200" value="100" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Luas Penampang 2 (A₂) = <span id="A2val">25</span> cm²
+          </label>
+          <input type="range" id="A2" min="10" max="100" value="25" class="w-full">
+        </div>
+
+        <button id="reset" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded font-bold">
+          Reset ke Awal
+        </button>
+
+        <!-- Hasil Real-Time -->
+        <div class="bg-gray-700 rounded-xl p-5 space-y-4">
+          <h3 class="text-xl font-bold text-cyan-400">Data Real-Time</h3>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div><span class="text-gray-400">v₁</span>: <span id="v1" class="font-mono text-yellow-400 text-xl">5.0</span> m/s</div>
+            <div><span class="text-gray-400">v₂</span>: <span id="v2" class="font-mono text-pink-400 text-xl">20.0</span> m/s</div>
+            <div><span class="text-gray-400">P₁</span>: <span id="P1" class="font-mono text-green-400 text-xl">130.4</span> kPa</div>
+            <div><span class="text-gray-400">P₂</span>: <span id="P2" class="font-mono text-red-400 text-xl">61.4</span> kPa</div>
+          </div>
+          <div class="text-center text-2xl font-bold text-cyan-300 mt-4" id="bernoulliEq"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gradient-to-b from-sky-950 to-gray-950 relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-gradient-to-r from-red-500 to-yellow-500 rounded"></div> Tekanan Tinggi</div>
+        <div class="flex items-center gap-2"><div class="w-6 h-6 bg-gradient-to-r from-blue-500 to-cyan-500 rounded"></div> Tekanan Rendah</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-white rounded-full"></div> Partikel Fluida</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+function resize() { w = canvas.width = canvas.clientWidth; h = canvas.height = canvas.clientHeight; }
+resize(); window.addEventListener('resize', resize);
+
+const g = 9.81;
+const rho = 1000; // kg/m³ air
+let Q = 50 / 1000;     // m³/s
+let h1 = 3, h2 = 8;
+let A1 = 100 / 1e4;    // m²
+let A2 = 25 / 1e4;     // m²
+
+const particles = [];
+
+// DOM
+const sliders = {
+  Q: document.getElementById('Q'),
+  h1: document.getElementById('h1'),
+  h2: document.getElementById('h2'),
+  A1: document.getElementById('A1'),
+  A2: document.getElementById('A2')
+};
+const vals = {
+  Q: document.getElementById('Qval'),
+  h1: document.getElementById('h1val'),
+  h2: document.getElementById('h2val'),
+  A1: document.getElementById('A1val'),
+  A2: document.getElementById('A2val'),
+  v1: document.getElementById('v1'),
+  v2: document.getElementById('v2'),
+  P1: document.getElementById('P1'),
+  P2: document.getElementById('P2'),
+  bernoulliEq: document.getElementById('bernoulliEq')
+};
+
+// Update semua nilai
+function update() {
+  Q = sliders.Q.value / 1000;
+  h1 = +sliders.h1.value;
+  h2 = +sliders.h2.value;
+  A1 = sliders.A1.value / 1e4;
+  A2 = sliders.A2.value / 1e4;
+
+  vals.Q.textContent = sliders.Q.value;
+  vals.h1.textContent = h1.toFixed(1);
+  vals.h2.textContent = h2.toFixed(1);
+  vals.A1.textContent = sliders.A1.value;
+  vals.A2.textContent = sliders.A2.value;
+
+  const v1_val = Q / A1;
+  const v2_val = Q / A2;
+
+  // Hukum Bernoulli: P₁ + ½ρv₁² + ρgh₁ = P₂ + ½ρv₂² + ρgh₂
+  const P1_val = 1e5 + rho * g * (h2 - h1) + 0.5 * rho * (v2_val**2 - v1_val**2);
+  const P2_val = 1e5; // kita set P2 = 1 atm sebagai referensi
+
+  vals.v1.textContent = v1_val.toFixed(1);
+  vals.v2.textContent = v2_val.toFixed(1);
+  vals.P1.textContent = (P1_val/1000).toFixed(1);
+  vals.P2.textContent = (P2_val/1000).toFixed(1);
+
+  vals.bernoulliEq.innerHTML = `P₁ + ½ρv₁² + ρgh₁ = P₂ + ½ρv₂² + ρgh₂<br>
+    <span class="text-4xl">${(P1_val/1000).toFixed(1)}</span> + 
+    <span class="text-yellow-400">${(0.5*rho*v1_val**2/1000).toFixed(1)}</span> + 
+    <span class="text-green-400">${(rho*g*h1/1000).toFixed(1)}</span> = 
+    <span class="text-red-400">${(0.5*rho*v2_val**2/1000).toFixed(1)}</span> + 
+    <span class="text-green-400">${(rho*g*h2/1000).toFixed(1)}</span> kPa`;
+}
+
+for (let key in sliders) {
+  sliders[key].addEventListener('input', update);
+}
+document.getElementById('reset').addEventListener('click', () => {
+  sliders.Q.value = 50; sliders.h1.value = 3; sliders.h2.value = 8;
+  sliders.A1.value = 100; sliders.A2.value = 25;
+  update();
+});
+
+// Animasi
+function draw() {
+  ctx.clearRect(0, 0, w, h);
+
+  const pipeY1 = h * 0.7 - h1 * 30;
+  const pipeY2 = h * 0.7 - h2 * 30;
+  const midX = w * 0.5;
+
+  // Pipa
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(100, pipeY1 - 80, w-200, 160);
+  ctx.fillRect(midX - 100, Math.min(pipeY1, pipeY2) - 200, 200, Math.abs(pipeY1 - pipeY2) + 400);
+
+  // Cairan (warna sesuai tekanan)
+  const P1 = 1e5 + rho * g * (h2 - h1) + 0.5 * rho * ((Q/A2)**2 - (Q/A1)**2);
+  const hue1 = 10 + (P1 - 8e4) / 1000;
+  const hue2 = 200 + (1e5 - 8e4) / 1000;
+  ctx.fillStyle = `hsl(${hue1}, 80%, 60%)`;
+  ctx.fillRect(100, pipeY1 - 70, midX - 100, 140);
+  ctx.fillStyle = `hsl(${hue2}, 80%, 60%)`;
+  ctx.fillRect(midX, pipeY2 - 70, w - midX - 100, 140);
+
+  // Partikel fluida
+  if (Math.random() < 0.3) {
+    particles.push({ x: 120, y: pipeY1 - 70 + Math.random()*140, vx: Q/A1 * 20 });
+  }
+  particles.forEach((p, i) => {
+    p.x += p.vx;
+    if (p.x > w - 100) particles.splice(i, 1);
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y + Math.sin(p.x*0.1)*10, 6, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Label
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Titik 1', w*0.25, pipeY1 - 100);
+  ctx.fillText('Titik 2', w*0.75, pipeY2 - 100);
+
+  requestAnimationFrame(draw);
+}
+
+update();
+draw();
+</script>
+</body>
+</html>

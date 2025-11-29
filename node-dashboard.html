@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Gelombang Tali & Standing Wave</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    .glow { filter: drop-shadow(0 0 15px currentColor); }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Gelombang Tali & Standing Wave</h1>
+    <p class="text-gray-400">Gelombang berjalan • Interferensi • Pola berdiri (node & antinode)</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-5">
+
+        <div class="flex gap-3">
+          <button id="oneSource" class="flex-1 bg-cyan-600 hover:bg-cyan-500 py-3 rounded font-medium">1 Sumber</button>
+          <button id="twoSources" class="flex-1 bg-purple-600 hover:bg-purple-500 py-3 rounded font-medium">2 Sumber</button>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Frekuensi 1 = <span id="f1Val">8</span> Hz
+          </label>
+          <input type="range" id="f1" min="1" max="25" value="8" class="w-full">
+        </div>
+
+        <div id="f2Control" class="hidden">
+          <label class="block text-sm font-medium mb-2">
+            Frekuensi 2 = <span id="f2Val">8</span> Hz
+          </label>
+          <input type="range" id="f2" min="1" max="25" value="8" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Amplitudo = <span id="ampVal">60</span> px
+          </label>
+          <input type="range" id="amp" min="10" max="120" value="60" class="w-full">
+        </div>
+
+        <div id="sepControl" class="hidden">
+          <label class="block text-sm font-medium mb-2">
+            Jarak Antar Sumber = <span id="sepVal">300</span> px
+          </label>
+          <input type="range" id="sep" min="100" max="600" value="300" class="w-full">
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Informasi Gelombang</h3>
+          <div><span class="text-gray-400">Jenis Gelombang</span>: <span id="waveType" class="font-mono text-cyan-400">Gelombang Berjalan</span></div>
+          <div id="standingInfo" class="hidden">
+            <span class="text-gray-400">Standing Wave</span>: <span id="nodeCount" class="font-mono text-yellow-400">3 node</span>
+          </div>
+          <div><span class="text-gray-400">Kecepatan Gelombang</span>: <span class="font-mono text-pink-400">≈ 240 px/s</span></div>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="pauseBtn" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded font-medium">Pause</button>
+          <button id="resetBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">Reset</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gradient-to-b from-gray-950 to-black relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-2">
+        <div class="flex items-center gap-2"><div class="w-6 h-1 bg-cyan-400 glow"></div> Gelombang dari sumber 1</div>
+        <div class="flex items-center gap-2"><div class="w-6 h-1 bg-purple-400 glow"></div> Gelombang dari sumber 2</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-orange-500 rounded-full"></div> Penggerak tali</div>
+        <div class="flex items-center gap-2"><div class="w-3 h-3 bg-gray-500 rounded-full"></div> Titik diam (node)</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Variabel
+let mode = 1; // 1 atau 2 sumber
+let f1 = 8, f2 = 8, A = 60, sep = 300;
+let t = 0, paused = false;
+
+// DOM Elements
+const oneSource = document.getElementById('oneSource');
+const twoSources = document.getElementById('twoSources');
+const f1Slider = document.getElementById('f1');
+const f2Slider = document.getElementById('f2');
+const ampSlider = document.getElementById('amp');
+const sepSlider = document.getElementById('sep');
+const f1Val = document.getElementById('f1Val');
+const f2Val = document.getElementById('f2Val');
+const ampVal = document.getElementById('ampVal');
+const sepVal = document.getElementById('sepVal');
+const waveType = document.getElementById('waveType');
+const standingInfo = document.getElementById('standingInfo');
+const nodeCount = document.getElementById('nodeCount');
+const pauseBtn = document.getElementById('pauseBtn');
+const resetBtn = document.getElementById('resetBtn');
+const f2Control = document.getElementById('f2Control');
+const sepControl = document.getElementById('sepControl');
+
+// Event Listeners
+oneSource.onclick = () => { mode = 1; updateMode(); };
+twoSources.onclick = () => { mode = 2; updateMode(); };
+f1Slider.oninput = () => { f1 = +f1Slider.value; f1Val.textContent = f1; };
+f2Slider.oninput = () => { f2 = +f2Slider.value; f2Val.textContent = f2; };
+ampSlider.oninput = () => { A = +ampSlider.value; ampVal.textContent = A; };
+sepSlider.oninput = () => { sep = +sepSlider.value; sepVal.textContent = sep; };
+pauseBtn.onclick = () => { paused = !paused; pauseBtn.textContent = paused ? 'Play' : 'Pause'; };
+resetBtn.onclick = () => { t = 0; paused = false; pauseBtn.textContent = 'Pause'; };
+
+function updateMode() {
+  oneSource.classList.toggle('bg-cyan-600', mode === 1);
+  oneSource.classList.toggle('bg-gray-600', mode !== 1);
+  twoSources.classList.toggle('bg-purple-600', mode === 2);
+  twoSources.classList.toggle('bg-gray-600', mode !== 2);
+  f2Control.classList.toggle('hidden', mode === 1);
+  sepControl.classList.toggle('hidden', mode === 1);
+}
+
+// Fungsi gelombang
+function waveAt(x, sourceX, freq) {
+  const v = 240; // px/s
+  const lambda = v / freq;
+  const k = 2 * Math.PI / lambda;
+  const omega = 2 * Math.PI * freq;
+  const distance = x - sourceX;
+  return A * Math.sin(k * distance - omega * t);
+}
+
+function draw() {
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, w, h);
+
+  if (!paused) t += 0.016;
+
+  const y0 = h / 2;
+  const leftEnd = 100;
+  const rightEnd = w - 100;
+
+  // Gambar tali
+  ctx.strokeStyle = mode === 1 ? '#06b6d4' : '#a78bfa';
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+
+  for (let x = leftEnd; x <= rightEnd; x += 3) {
+    let y = y0;
+    if (mode === 1) {
+      y += waveAt(x, leftEnd, f1);
+    } else {
+      const s1x = w/2 - sep/2;
+      const s2x = w/2 + sep/2;
+      y += waveAt(x, s1x, f1) + waveAt(x, s2x, f2);
+    }
+    if (x === leftEnd) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Titik penggerak
+  ctx.fillStyle = '#fb923c';
+  if (mode === 1) {
+    const yLeft = y0 + waveAt(leftEnd, leftEnd, f1);
+    ctx.beginPath(); ctx.arc(leftEnd, yLeft, 18, 0, Math.PI*2); ctx.fill();
+  } else {
+    const s1x = w/2 - sep/2;
+    const s2x = w/2 + sep/2;
+    const y1 = y0 + waveAt(s1x, s1x, f1) + waveAt(s1x, s2x, f2);
+    const y2 = y0 + waveAt(s2x, s1x, f1) + waveAt(s2x, s2x, f2);
+    ctx.beginPath(); ctx.arc(s1x, y1, 18, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s2x, y2, 18, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Deteksi standing wave
+  if (mode === 2 && Math.abs(f1 - f2) < 0.5) {
+    const effectiveFreq = (f1 + f2) / 2;
+    const distanceBetweenSources = sep;
+    const lambda = 240 / effectiveFreq;
+    const nodes = Math.round(distanceBetweenSources / lambda) + 1;
+    waveType.textContent = "STANDING WAVE!";
+    standingInfo.classList.remove('hidden');
+    nodeCount.textContent = nodes + " node • " + (nodes + 1) + " antinode";
+  } else {
+    waveType.textContent = mode === 1 ? "Gelombang Berjalan" : "Interferensi";
+    standingInfo.classList.add('hidden');
+  }
+
+  requestAnimationFrame(draw);
+}
+
+updateMode();
+draw();
+</script>
+</body>
+</html>

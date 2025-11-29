@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Gerak Parabola + Data Real-Time</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    #realtimePanel { 
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+    }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Fisika - Gerak Parabola</h1>
+    <p class="text-gray-400">Drag meriam • Tembak • Data real-time </p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium mb-2">Kecepatan Awal (v₀) = <span id="v0Val">25.0</span> m/s</label>
+          <input type="range" id="v0Slider" min="5" max="60" step="0.5" value="25" class="w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">Sudut Tembak (θ) = <span id="angleVal">45.0</span>°</label>
+          <input type="range" id="angleSlider" min="5" max="85" step="0.5" value="45" class="w-full">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">Gravitasi</label>
+          <select id="gravitySelect" class="w-full bg-gray-700 rounded px-3 py-2">
+            <option value="9.81">Bumi (9.81 m/s²)</option>
+            <option value="1.62">Bulan (1.62 m/s²)</option>
+            <option value="3.71">Mars (3.71 m/s²)</option>
+            <option value="0">Tanpa Gravitasi</option>
+          </select>
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium">Hambatan Udara</label>
+          <input type="checkbox" id="airDrag" class="w-6 h-6 text-blue-600 bg-gray-700 rounded">
+        </div>
+
+        <!-- Prediksi Teori -->
+        <div class="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
+          <h3 class="font-semibold text-lg text-gray-300">Prediksi Teori (tanpa drag)</h3>
+          <div><span class="text-gray-400">Tinggi maks</span>: <span id="hMax">-</span> m</div>
+          <div><span class="text-gray-400">Jarak jangkau</span>: <span id="range">-</span> m</div>
+          <div><span class="text-gray-400">Waktu terbang</span>: <span id="time">-</span> s</div>
+        </div>
+
+        <button id="launchBtn" class="w-full bg-red-600 hover:bg-red-700 py-3 rounded font-bold text-lg">
+          TEMBAK!
+        </button>
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gradient-to-b from-sky-900 to-gray-950 relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <!-- Panel Real-Time (bisa ditutup manual) -->
+      <div id="realtimePanel" class="absolute top-4 right-4 w-80 bg-black bg-opacity-90 rounded-xl p-5 shadow-2xl border border-gray-700 transform translate-x-full z-50">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-bold text-cyan-400">Data Real-Time</h3>
+          <button id="closePanel" class="text-gray-400 hover:text-red-400 text-3xl font-bold focus:outline-none transition-colors">
+            ×
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div><span class="text-gray-400">Waktu</span>: <span id="rtTime" class="font-mono text-green-400">0.00</span> s</div>
+          <div><span class="text-gray-400">Ketinggian</span>: <span id="rtY" class="font-mono text-yellow-400">0.0</span> m</div>
+          <div><span class="text-gray-400">Jarak</span>: <span id="rtX" class="font-mono text-pink-400">0.0</span> m</div>
+          <div><span class="text-gray-400">Kecepatan</span>: <span id="rtV" class="font-mono text-cyan-400">0.0</span> m/s</div>
+          <div><span class="text-gray-400">vₓ</span>: <span id="rtVx" class="font-mono">0.0</span> m/s</div>
+          <div><span class="text-gray-400">vᵧ</span>: <span id="rtVy" class="font-mono">0.0</span> m/s</div>
+          <div class="col-span-2"><span class="text-gray-400">Energi Kinetik</span>: <span id="rtEK" class="font-mono text-orange-400">0</span> J</div>
+          <div class="col-span-2"><span class="text-gray-400">Energi Potensial</span>: <span id="rtEP" class="font-mono text-lime-400">0</span> J</div>
+          <div class="col-span-2 border-t border-gray-600 pt-3">
+            <span class="text-gray-400">Energi Total</span>: <span id="rtET" class="font-mono text-white font-bold text-lg">0</span> J
+          </div>
+        </div>
+      </div>
+
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-orange-500 rounded-full"></div> Proyektil</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-gray-400"></div> Lintasan tanpa drag</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-red-400"></div> Lintasan dengan drag</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const realtimePanel = document.getElementById('realtimePanel');
+let w, h;
+
+// Real-time elements
+const rtTime = document.getElementById('rtTime'), rtX = document.getElementById('rtX'), rtY = document.getElementById('rtY');
+const rtV = document.getElementById('rtV'), rtVx = document.getElementById('rtVx'), rtVy = document.getElementById('rtVy');
+const rtEK = document.getElementById('rtEK'), rtEP = document.getElementById('rtEP'), rtET = document.getElementById('rtET');
+
+// Physics variables
+let v0 = 25, angle = 45, g = 9.81, drag = false;
+let isFlying = false, t = 0, trail = [];
+let isDragging = false;
+const m = 1; // massa 1 kg
+
+// DOM elements
+const v0Slider = document.getElementById('v0Slider'), v0Val = document.getElementById('v0Val');
+const angleSlider = document.getElementById('angleSlider'), angleVal = document.getElementById('angleVal');
+const gravitySelect = document.getElementById('gravitySelect');
+const airDrag = document.getElementById('airDrag');
+const hMaxEl = document.getElementById('hMax'), rangeEl = document.getElementById('range'), timeEl = document.getElementById('time');
+const launchBtn = document.getElementById('launchBtn'), resetBtn = document.getElementById('resetBtn');
+
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+function calculateTheory() {
+  if (drag) {
+    hMaxEl.textContent = rangeEl.textContent = timeEl.textContent = "— (simulasi)";
+    return;
+  }
+  const rad = angle * Math.PI / 180;
+  const vx = v0 * Math.cos(rad), vy = v0 * Math.sin(rad);
+  hMaxEl.textContent = (vy*vy/(2*g)).toFixed(1) + " m";
+  rangeEl.textContent = (2*vx*vy/g).toFixed(1) + " m";
+  timeEl.textContent = (2*vy/g).toFixed(1) + " s";
+}
+calculateTheory();
+
+// ============ TOMBOL CLOSE PANEL ============
+document.getElementById('closePanel').addEventListener('click', () => {
+  realtimePanel.classList.add('translate-x-full');
+});
+
+// ============ MAIN DRAW LOOP ============
+function draw() {
+  ctx.clearRect(0, 0, w, h);
+  const groundY = h * 0.85;
+  const cannonX = w * 0.2, cannonY = groundY;
+  const rad = angle * Math.PI / 180;
+
+  // Tanah
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(0, groundY, w, h-groundY);
+
+  // Meriam
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 22;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cannonX, cannonY);
+  ctx.lineTo(cannonX + 120*Math.cos(rad), cannonY - 120*Math.sin(rad));
+  ctx.stroke();
+
+  if (isFlying) {
+    t += 0.016;
+
+    let x, y, vx, vy;
+
+    if (!drag) {
+      vx = v0 * Math.cos(rad);
+      vy = v0 * Math.sin(rad) - g * t;
+      x = cannonX + vx * t;
+      y = cannonY - (v0 * Math.sin(rad) * t - 0.5 * g * t*t);
+    } else {
+      const k = 0.018;
+      vx = v0 * Math.cos(rad) * Math.exp(-k*t);
+      vy = (v0 * Math.sin(rad) + g/k) * Math.exp(-k*t) - g/k;
+      x = cannonX + v0*Math.cos(rad)/k * (1 - Math.exp(-k*t));
+      y = cannonY - (v0*Math.sin(rad)+g/k)/k * (1 - Math.exp(-k*t)) + (g/k)*t;
+    }
+
+    // Update panel real-time
+    const height = Math.max(0, cannonY - y);
+    const dist = x - cannonX;
+    const speed = Math.hypot(vx, vy);
+    const EK = 0.5 * m * speed*speed;
+    const EP = m * g * height;
+    const ET = EK + EP;
+
+    rtTime.textContent = t.toFixed(2);
+    rtX.textContent = dist.toFixed(1);
+    rtY.textContent = height.toFixed(1);
+    rtV.textContent = speed.toFixed(1);
+    rtVx.textContent = vx.toFixed(1);
+    rtVy.textContent = vy.toFixed(1);
+    rtEK.textContent = EK.toFixed(1);
+    rtEP.textContent = EP.toFixed(1);
+    rtET.textContent = ET.toFixed(1);
+
+    // Selalu tampilkan panel saat terbang (kecuali user sudah close manual)
+    if (!realtimePanel.classList.contains('translate-x-full')) {
+      realtimePanel.classList.remove('translate-x-full');
+    }
+
+    // Trail
+    trail.push({x, y});
+    if (trail.length > 400) trail.shift();
+    ctx.strokeStyle = drag ? '#ef4444' : '#60a5fa';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    trail.forEach((p,i)=> i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+
+    // Bola
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath();
+    ctx.arc(x, y, 14, 0, Math.PI*2);
+    ctx.fill();
+
+    if (y >= groundY) {
+      isFlying = false;
+      // Panel TIDAK otomatis hilang lagi → hanya ditutup manual
+    }
+  }
+
+  // Panah kontrol (drag)
+  if (!isFlying) {
+    const len = v0 * 6;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 6;
+    ctx.setLineDash([12,8]);
+    ctx.beginPath();
+    ctx.moveTo(cannonX, cannonY);
+    ctx.lineTo(cannonX + len*Math.cos(rad), cannonY - len*Math.sin(rad));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.moveTo(cannonX + len*Math.cos(rad), cannonY - len*Math.sin(rad));
+    ctx.lineTo(cannonX + len*Math.cos(rad)-25*Math.cos(rad+0.5), cannonY - len*Math.sin(rad)-25*Math.sin(rad+0.5));
+    ctx.lineTo(cannonX + len*Math.cos(rad)-25*Math.cos(rad-0.5), cannonY - len*Math.sin(rad)-25*Math.sin(rad-0.5));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ============ EVENT LISTENERS ============
+v0Slider.addEventListener('input', () => { v0 = +v0Slider.value; v0Val.textContent = v0.toFixed(1); calculateTheory(); });
+angleSlider.addEventListener('input', () => { angle = +angleSlider.value; angleVal.textContent = angle.toFixed(1); calculateTheory(); });
+gravitySelect.addEventListener('change', () => { g = +gravitySelect.value; calculateTheory(); });
+airDrag.addEventListener('change', () => { drag = airDrag.checked; calculateTheory(); });
+
+launchBtn.addEventListener('click', () => {
+  if (!isFlying) {
+    isFlying = true;
+    t = 0;
+    trail = [];
+    // Munculkan panel lagi saat tembak (kalau sebelumnya ditutup)
+    realtimePanel.classList.remove('translate-x-full');
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  v0 = 25; angle = 45;
+  v0Slider.value = 25; angleSlider.value = 45;
+  v0Val.textContent = "25.0"; angleVal.textContent = "45.0";
+  calculateTheory();
+});
+
+// Drag di canvas
+canvas.addEventListener('mousedown', e => { if(!isFlying) startDrag(e); });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); if(!isFlying) startDrag(e); });
+function startDrag(e) { isDragging = true; updateDrag(e); }
+function updateDrag(e) {
+  if (!isDragging || isFlying) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.touches?.[0].clientX || e.clientX) - rect.left;
+  const my = (e.touches?.[0].clientY || e.clientY) - rect.top;
+  const cx = w*0.2, cy = h*0.85;
+  let dx = mx - cx, dy = cy - my;
+  let dist = Math.hypot(dx, dy);
+  angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (angle < 5) angle = 5; if (angle > 85) angle = 85;
+  v0 = Math.min(dist/6, 60); if (v0 < 5) v0 = 5;
+  angleSlider.value = angle; v0Slider.value = v0;
+  angleVal.textContent = angle.toFixed(1); v0Val.textContent = v0.toFixed(1);
+  calculateTheory();
+}
+canvas.addEventListener('mousemove', updateDrag);
+canvas.addEventListener('touchmove', e=>{e.preventDefault(); updateDrag(e);});
+canvas.addEventListener('mouseup', () => isDragging = false);
+canvas.addEventListener('touchend', () => isDragging = false);
+
+// Start
+draw();
+</script>
+</body>
+</html>

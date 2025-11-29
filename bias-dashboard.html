@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulasi Pembiasan Cahaya</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Optik Fisika - Pembiasan Cahaya</h1>
+    <p class="text-gray-400">Drag titik merah pada sinar datang untuk mengubah sudut datang</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">Medium 1</label>
+          <div class="bg-gray-700 rounded px-3 py-2">Udara (n₁ = 1.00)</div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Medium 2: <span id="mediumName">Kaca</span> (n₂ = <span id="n2Val">1.50</span>)
+          </label>
+          <select id="mediumSelect" class="w-full bg-gray-700 rounded px-3 py-2 mb-3">
+            <option value="1.33">Air (1.33)</option>
+            <option value="1.50" selected>Kaca (1.50)</option>
+            <option value="1.62">Kaca Flint (1.62)</option>
+            <option value="2.42">Intan (2.42)</option>
+            <option value="0.75">Custom (n₂ < n₁)</option>
+          </select>
+          <input type="range" id="n2Slider" min="0.75" max="2.50" step="0.01" value="1.50" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Sudut Datang (i) = <span id="angleI">45.0</span>°</label>
+          <input type="range" id="angleISlider" min="0" max="89" step="0.5" value="45" class="w-full">
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Hasil Perhitungan</h3>
+          <div><span class="text-gray-400">Sudut Bias (r)</span>: <span id="angleR" class="font-mono text-green-400">28.1°</span></div>
+          <div><span class="text-gray-400">n₁ × sin i</span>: <span id="leftSide" class="font-mono text-blue-400">0.707</span></div>
+          <div><span class="text-gray-400">n₂ × sin r</span>: <span id="rightSide" class="font-mono text-blue-400">0.707</span></div>
+          <div><span class="text-gray-400">Keterangan</span>: <span id="info" class="font-mono text-yellow-400">Cahaya dibiaskan mendekati garis normal</span></div>
+        </div>
+
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset Posisi
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gray-950 relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+      
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-cyan-400"></div> Sinar datang</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-yellow-400"></div> Sinar bias</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-white opacity-50"></div> Garis normal</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-red-500"></div> Titik kontrol (drag)</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+
+function resize() {
+  width = canvas.width = canvas.clientWidth;
+  height = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Parameter fisika
+let n1 = 1.00;                    // udara
+let n2 = 1.50;                    // medium 2
+let angleI = 45;                  // sudut datang dalam derajat
+let angleR = 0;                   // sudut bias (dihitung)
+let isDragging = false;
+
+// Elemen DOM
+const n2Slider = document.getElementById('n2Slider');
+const n2Val = document.getElementById('n2Val');
+const mediumSelect = document.getElementById('mediumSelect');
+const mediumName = document.getElementById('mediumName');
+const angleISlider = document.getElementById('angleISlider');
+const angleIEl = document.getElementById('angleI');
+const angleREl = document.getElementById('angleR');
+const leftSideEl = document.getElementById('leftSide');
+const rightSideEl = document.getElementById('rightSide');
+const infoEl = document.getElementById('info');
+const resetBtn = document.getElementById('resetBtn');
+
+// Preset nama medium
+const mediumNames = {
+  '1.33': 'Air',
+  '1.50': 'Kaca',
+  '1.62': 'Kaca Flint',
+  '2.42': 'Intan',
+  '0.75': 'Custom (n₂ < n₁)'
+};
+
+// Hitung sudut bias dengan Hukum Snellius
+function calculateRefraction() {
+  const iRad = angleI * Math.PI / 180;
+  const sinR = (n1 / n2) * Math.sin(iRad);
+  
+  if (sinR > 1) {
+    // Refleksi total
+    angleR = 90;
+    angleREl.textContent = '— (Refleksi Total)';
+    infoEl.textContent = 'TERJADI REFLEKSI TOTAL DALAM';
+    infoEl.className = 'font-mono text-red-400';
+  } else {
+    angleR = Math.asin(sinR) * 180 / Math.PI;
+    angleREl.textContent = angleR.toFixed(1) + '°';
+    infoEl.className = 'font-mono text-yellow-400';
+    if (n2 > n1) {
+      infoEl.textContent = 'Cahaya dibiaskan mendekati garis normal';
+    } else {
+      infoEl.textContent = 'Cahaya dibiaskan menjauhi garis normal';
+    }
+  }
+
+  // Update nilai hukum Snellius
+  leftSideEl.textContent = (n1 * Math.sin(iRad)).toFixed(3);
+  rightSideEl.textContent = sinR > 1 ? '—' : (n2 * Math.sin(angleR * Math.PI / 180)).toFixed(3);
+}
+
+// Gambar semua elemen
+function draw() {
+  ctx.clearRect(0, 0, width, height);
+
+  const centerY = height * 0.5;
+  const boundaryY = centerY;
+  const boundaryX = width * 0.5;
+
+  // Background medium
+  ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+  ctx.fillRect(0, 0, width, boundaryY);        // Medium 1 (atas)
+  ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+  ctx.fillRect(0, boundaryY, width, height);    // Medium 2 (bawah)
+
+  // Batas bidang
+  ctx.strokeStyle = '#6b7280';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(0, boundaryY);
+  ctx.lineTo(width, boundaryY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Label medium
+  ctx.fillStyle = '#93c5fd';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(`Medium 1 (n₁ = ${n1.toFixed(2)})`, 20, boundaryY - 20);
+  ctx.fillStyle = '#86efac';
+  ctx.fillText(`Medium 2 (n₂ = ${n2.toFixed(2)})`, 20, boundaryY + 40);
+
+  // Garis normal (putih putus-putus)
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(boundaryX, boundaryY - height);
+  ctx.lineTo(boundaryX, boundaryY + height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Titik temu
+  const originX = boundaryX;
+  const originY = boundaryY;
+
+  // Sinar datang (cyan)
+  const incidentLength = 300;
+  const iRad = angleI * Math.PI / 180;
+  const startX = originX - incidentLength * Math.cos(iRad);
+  const startY = originY - incidentLength * Math.sin(iRad);
+
+  ctx.strokeStyle = '#06b6d4';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(originX, originY);
+  ctx.stroke();
+
+  // Titik kontrol (merah) untuk drag
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath();
+  ctx.arc(startX, startY, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Sinar bias (kuning)
+  if (n1 / n2 * Math.sin(iRad) <= 1) {
+    const rRad = angleR * Math.PI / 180;
+    const refractedLength = 300;
+    const endX = originX + refractedLength * Math.cos(rRad);
+    const endY = originY + refractedLength * Math.sin(rRad);
+
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(originX, originY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  }
+
+  // Label sudut
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(`i = ${angleI.toFixed(1)}°`, originX - 80, originY - 60);
+  if (n1 / n2 * Math.sin(iRad) <= 1) {
+    ctx.fillText(`r = ${angleR.toFixed(1)}°`, originX + 40, originY + 80);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// Event handlers
+n2Slider.addEventListener('input', (e) => {
+  n2 = parseFloat(e.target.value);
+  n2Val.textContent = n2.toFixed(2);
+  calculateRefraction();
+});
+
+mediumSelect.addEventListener('change', (e) => {
+  n2 = parseFloat(e.target.value);
+  n2Slider.value = n2;
+  n2Val.textContent = n2.toFixed(2);
+  mediumName.textContent = mediumNames[e.target.value] || 'Custom';
+  calculateRefraction();
+});
+
+angleISlider.addEventListener('input', (e) => {
+  angleI = parseFloat(e.target.value);
+  angleIEl.textContent = angleI.toFixed(1);
+  calculateRefraction();
+});
+
+resetBtn.addEventListener('click', () => {
+  angleI = 45;
+  angleISlider.value = 45;
+  angleIEl.textContent = '45.0';
+  calculateRefraction();
+});
+
+// Drag kontrol sudut datang
+canvas.addEventListener('mousedown', startDrag);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrag(e); });
+
+function startDrag(e) {
+  isDragging = true;
+  updateFromMouse(e);
+}
+
+function updateFromMouse(e) {
+  if (!isDragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const y = (e.touches ? e.touches[0].clientY : e.touches[0].clientY) - rect.top;
+
+  const originX = width / 2;
+  const originY = height / 2;
+
+  let dx = originX - x;
+  let dy = originY - y;
+
+  // Batasi agar sinar datang dari atas
+  if (dy < 0) return;
+
+  let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (angle > 89) angle = 89;
+  if (angle < 0) angle = 0;
+
+  angleI = angle;
+  angleISlider.value = angleI;
+  angleIEl.textContent = angleI.toFixed(1);
+  calculateRefraction();
+}
+
+canvas.addEventListener('mousemove', updateFromMouse);
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateFromMouse(e); });
+canvas.addEventListener('mouseup', () => isDragging = false);
+canvas.addEventListener('touchend', () => isDragging = false);
+
+// Inisialisasi
+calculateRefraction();
+draw();
+</script>
+</body>
+</html>

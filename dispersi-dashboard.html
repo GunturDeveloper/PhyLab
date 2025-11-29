@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulasi Dispersi Cahaya</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style> canvas { touch-action: none; } </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Optik Fisika - Dispersi Cahaya pada Prisma</h1>
+    <p class="text-gray-400">Drag cahaya putih atau ubah sudut untuk melihat spektrum warna</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-5">
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Sudut Datang (i₁) = <span id="i1Val">60.0</span>°</label>
+          <input type="range" id="i1Slider" min="30" max="85" step="0.5" value="60" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Sudut Puncak Prisma (A) = <span id="apexVal">60.0</span>°</label>
+          <input type="range" id="apexSlider" min="30" max="90" step="1" value="60" class="w-full">
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Hasil Dispersi</h3>
+          <div><span class="text-gray-400">Sudut Deviasi Minimum</span>: <span id="devMin" class="font-mono text-green-400">—</span></div>
+          <div><span class="text-gray-400">Lebar Spektrum</span>: <span id="spread" class="font-mono text-yellow-400">—</span></div>
+          <div><span class="text-gray-400">Urutan Warna</span>: <span class="font-mono text-pink-400">Merah → Jingga → Kuning → Hijau → Biru → Nila → Ungu</span></div>
+        </div>
+
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset Posisi
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gray-950 relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-white"></div> Cahaya putih masuk</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-gradient-to-r from-red-500 via-yellow-500 to-violet-500"></div> Spektrum keluar</div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full bg-red-500"></div> Titik kontrol (drag)</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Parameter
+let incidentAngle = 60;     // i₁ dalam derajat
+let apexAngle = 60;         // sudut puncak prisma A dalam derajat
+let isDragging = false;
+
+// Indeks bias untuk panjang gelombang berbeda (kaca crown BK7 approximate)
+const wavelengths = [
+  { name: "Merah",   lambda: 650, n: 1.514, color: "#ef4444" },
+  { name: "Jingga",  lambda: 600, n: 1.517, color: "#f97316" },
+  { name: "Kuning",  lambda: 580, n: 1.520, color: "#eab308" },
+  { name: "Hijau",   lambda: 550, n: 1.525, color: "#22c55e" },
+  { name: "Biru",    lambda: 470, n: 1.533, color: "#3b82f6" },
+  { name: "Nila",    lambda: 450, n: 1.538, color: "#6366f1" },
+  { name: "Ungu",    lambda: 420, n: 1.545, color: "#a855f7" }
+];
+
+// Elemen UI
+const i1Slider = document.getElementById('i1Slider');
+const i1Val = document.getElementById('i1Val');
+const apexSlider = document.getElementById('apexSlider');
+const apexVal = document.getElementById('apexVal');
+const devMinEl = document.getElementById('devMin');
+const spreadEl = document.getElementById('spread');
+const resetBtn = document.getElementById('resetBtn');
+
+// Hitung pembiasan untuk satu warna
+function refract(n1, n2, i) {
+  const sinR = n1 / n2 * Math.sin(i * Math.PI / 180);
+  if (sinR > 1) return null; // refleksi total
+  return Math.asin(sinR) * 180 / Math.PI;
+}
+
+// Hitung semua sudut di dalam prisma
+function calculateDispersion() {
+  const results = wavelengths.map(w => {
+    // Pembiasan pertama (udara → kaca)
+    const r1 = refract(1.0, w.n, incidentAngle);
+    if (r1 === null) return null;
+
+    // Sudut datang kedua di dalam prisma
+    const i2 = apexAngle - r1;
+    if (i2 < 0) return null;
+
+    // Pembiasan kedua (kaca → udara)
+    const r2 = refract(w.n, 1.0, i2);
+    if (r2 === null) return null;
+
+    // Sudut deviasi total untuk warna ini
+    const deviation = incidentAngle + r2 - apexAngle;
+    return { ...w, r1, i2, r2, deviation };
+  });
+
+  // Hitung deviasi minimum (untuk warna kuning/hijau rata-rata)
+  const avg = results.find(r => r && r.lambda === 580);
+  const minDev = avg ? avg.deviation.toFixed(1) + "°" : "—";
+  devMinEl.textContent = minDev;
+
+  // Lebar spektrum = selisih deviasi maks–min
+  const valid = results.filter(Boolean);
+  if (valid.length > 0) {
+    const devs = valid.map(v => v.deviation);
+    const spread = (Math.max(...devs) - Math.min(...devs)).toFixed(2);
+    spreadEl.textContent = spread + "°";
+  } else {
+    spreadEl.textContent = "—";
+  }
+
+  window.dispersionData = results;
+}
+
+// Gambar
+function draw() {
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w * 0.4;
+  const cy = h * 0.5;
+  const prismSize = Math.min(w, h) * 0.25;
+
+  // Gambar prisma (segitiga sama sisi atau sesuai sudut A)
+  const A = apexAngle * Math.PI / 180;
+  const hPrism = prismSize * Math.sin(A);
+  const baseHalf = prismSize * Math.cos(A);
+
+  ctx.fillStyle = 'rgba(147, 197, 253, 0.25)';
+  ctx.strokeStyle = '#60a5fa';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx - baseHalf, cy + hPrism);
+  ctx.lineTo(cx + baseHalf, cy + hPrism);
+  ctx.lineTo(cx, cy - prismSize * 0.8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Titik masuk cahaya (drag point)
+  const lightStartX = cx - 300;
+  const lightStartY = cy - 300 * Math.tan((90 - incidentAngle) * Math.PI / 180);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(lightStartX, lightStartY);
+  ctx.lineTo(cx - baseHalf, cy + hPrism);
+  ctx.stroke();
+
+  // Titik kontrol merah
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath();
+  ctx.arc(lightStartX, lightStartY, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Gambar sinar warna-warni keluar (dispersi)
+  if (window.dispersionData) {
+    window.dispersionData.forEach((d, i) => {
+      if (!d) return;
+
+      const offset = (i - 3) * 4; // fanning effect
+
+      // Titik keluar dari prisma
+      const exitX = cx + baseHalf + 100;
+      const exitAngle = (90 - d.r2) * Math.PI / 180;
+      const exitY = (cy + hPrism) + 250 * Math.tan(exitAngle + offset * Math.PI / 180);
+
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(cx + baseHalf, cy + hPrism);
+      ctx.lineTo(exitX + 200, exitY);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  // Label
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.fillText(`i = ${incidentAngle.toFixed(1)}°`, lightStartX + 20, lightStartY - 20);
+  ctx.fillText(`A = ${apexAngle}°`, cx - 30, cy - prismSize);
+
+  requestAnimationFrame(draw);
+}
+
+// Event handlers
+i1Slider.addEventListener('input', e => {
+  incidentAngle = parseFloat(e.target.value);
+  i1Val.textContent = incidentAngle.toFixed(1);
+  calculateDispersion();
+});
+
+apexSlider.addEventListener('input', e => {
+  apexAngle = parseFloat(e.target.value);
+  apexVal.textContent = apexAngle.toFixed(0);
+  calculateDispersion();
+});
+
+resetBtn.addEventListener('click', () => {
+  incidentAngle = 60;
+  apexAngle = 60;
+  i1Slider.value = 60;
+  apexSlider.value = 60;
+  i1Val.textContent = "60.0";
+  apexVal.textContent = "60.0";
+  calculateDispersion();
+});
+
+// Drag cahaya putih
+let drag = false;
+function start(e) { drag = true; move(e); }
+function move(e) {
+  if (!drag) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const y = (e.touches ? e.touches[0].clientY : e.touches[0].clientY) - rect.top;
+
+  const dx = x - (w * 0.4 - 150);
+  const dy = y - (h * 0.5);
+  let angle = Math.atan2(-dy, -dx) * 180 / Math.PI;
+  if (angle < 30) angle = 30;
+  if (angle > 85) angle = 85;
+
+  incidentAngle = angle;
+  i1Slider.value = angle;
+  i1Val.textContent = angle.toFixed(1);
+  calculateDispersion();
+}
+function end() { drag = false; }
+
+canvas.addEventListener('mousedown', start);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); });
+canvas.addEventListener('mousemove', move);
+canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); });
+canvas.addEventListener('mouseup', end);
+canvas.addEventListener('touchend', end);
+
+// Init
+calculateDispersion();
+draw();
+</script>
+</body>
+</html>

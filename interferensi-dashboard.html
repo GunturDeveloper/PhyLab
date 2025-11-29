@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulasi Interferensi Celah Ganda</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    canvas { touch-action: none; }
+    .glow { filter: drop-shadow(0 0 15px currentColor); }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+    <h1 class="text-2xl font-bold">Simulasi Optik Fisika - Interferensi Celah Ganda</h1>
+    <p class="text-gray-400">Eksperimen Young: pola garis terang & gelap</p>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Kontrol -->
+    <aside class="bg-gray-800 w-full lg:w-80 p-6 space-y-6 overflow-y-auto">
+      <div class="space-y-5">
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Panjang Gelombang (λ) = <span id="lambdaVal">650</span> nm
+          </label>
+          <input type="range" id="lambdaSlider" min="380" max="780" step="5" value="650" class="w-full">
+          <select id="colorPreset" class="mt-2 w-full bg-gray-700 rounded px-3 py-2 text-sm">
+            <option value="650">Merah</option>
+            <option value="590">Jingga</option>
+            <option value="570">Kuning</option>
+            <option value="510">Hijau</option>
+            <option value="475">Biru</option>
+            <option value="420">Ungu</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Jarak Antar Celah (d) = <span id="dVal">0.50</span> mm
+          </label>
+          <input type="range" id="dSlider" min="0.10" max="2.00" step="0.05" value="0.50" class="w-full">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">
+            Jarak ke Layar (L) = <span id="LVal">2.00</span> m
+          </label>
+          <input type="range" id="LSlider" min="0.5" max="5.0" step="0.1" value="2.0" class="w-full">
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-lg">Hasil Interferensi</h3>
+          <div><span class="text-gray-400">Jarak Garis Terang (Δy)</span>: <span id="fringeSpacing" class="font-mono text-cyan-400">2.60 mm</span></div>
+          <div><span class="text-gray-400">Orde Maksimum (m)</span>: <span id="maxOrder" class="font-mono text-yellow-400">±15</span></div>
+          <div><span class="text-gray-400">Lebar Pola Pusat</span>: <span id="centralWidth" class="font-mono text-pink-400">10.4 cm</span></div>
+          <div><span class="text-gray-400">Keterangan</span>: <span id="info" class="font-mono text-green-400">Interferensi konstruktif & destruktif jelas</span></div>
+        </div>
+
+        <button id="resetBtn" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">
+          Reset Semua
+        </button>
+      </div>
+    </aside>
+
+    <!-- Area Simulasi -->
+    <main class="flex-1 bg-gradient-to-b from-gray-950 to-black relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+
+      <!-- Legenda -->
+      <div class="absolute top-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="flex items-center gap-2"><div class="w-4 h-1 bg-white"></div> Cahaya datang</div>
+        <div class="flex items-center gap-2 glow"><div class="w-4 h-1" id="legendColor"></div> Pola interferensi</div>
+        <div class="flex items-center gap-2"><div class="w-8 h-16 bg-gray-600 inline-block"></div> Celah ganda</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Parameter fisika
+let lambda = 650e-9;      // m
+let d = 0.50e-3;          // jarak antar celah (m)
+let L = 2.0;              // jarak layar (m)
+let color = '#ef4444';
+
+// DOM
+const lambdaSlider = document.getElementById('lambdaSlider');
+const lambdaVal = document.getElementById('lambdaVal');
+const colorPreset = document.getElementById('colorPreset');
+const dSlider = document.getElementById('dSlider');
+const dVal = document.getElementById('dVal');
+const LSlider = document.getElementById('LSlider');
+const LVal = document.getElementById('LVal');
+const fringeSpacingEl = document.getElementById('fringeSpacing');
+const maxOrderEl = document.getElementById('maxOrder');
+const centralWidthEl = document.getElementById('centralWidth');
+const infoEl = document.getElementById('info');
+const legendColor = document.getElementById('legendColor');
+const resetBtn = document.getElementById('resetBtn');
+
+// Konversi panjang gelombang ke warna RGB
+function wavelengthToRGB(wl) {
+  let r = 0, g = 0, b = 0;
+  if (wl >= 380 && wl < 440) { r = -(wl - 440) / (440 - 380); b = 1; }
+  else if (wl < 490) { g = (wl - 440) / (490 - 440); b = 1; }
+  else if (wl < 510) { g = 1; b = -(wl - 510) / (510 - 490); }
+  else if (wl < 580) { r = (wl - 510) / (580 - 510); g = 1; }
+  else if (wl < 645) { r = 1; g = -(wl - 645) / (645 - 580); }
+  else { r = 1; }
+  const factor = wl < 420 ? 0.3 + 0.7*(wl-380)/40 : 1;
+  return `rgb(${Math.round(r*255*factor)}, ${Math.round(g*255*factor)}, ${Math.round(b*255*factor)})`;
+}
+
+// Update perhitungan
+function update() {
+  lambda = parseInt(lambdaSlider.value) * 1e-9;
+  d = parseFloat(dSlider.value) * 1e-3;
+  L = parseFloat(LSlider.value);
+
+  color = wavelengthToRGB(parseInt(lambdaSlider.value));
+  legendColor.style.backgroundColor = color;
+
+  // Jarak antar garis terang (fringe spacing)
+  const deltaY = (lambda * L / d) * 1000; // mm
+  fringeSpacingEl.textContent = deltaY.toFixed(2) + " mm";
+
+  // Lebar pola pusat (2 × jarak orde 1)
+  centralWidthEl.textContent = (2 * deltaY * 10).toFixed(1) + " cm";
+
+  // Orde maksimum terlihat
+  const maxM = Math.floor(d / lambda);
+  maxOrderEl.textContent = "±" + maxM;
+
+  // Keterangan
+  if (deltaY > 10) {
+    infoEl.textContent = "Pola sangat jarang (λ besar / d kecil)";
+    infoEl.className = "font-mono text-orange-400";
+  } else if (deltaY < 0.3) {
+    infoEl.textContent = "Pola sangat rapat → hampir seragam";
+    infoEl.className = "font-mono text-red-400";
+  } else {
+    infoEl.textContent = "Interferensi konstruktif & destruktif jelas";
+    infoEl.className = "font-mono text-green-400";
+  }
+}
+
+// Gambar simulasi
+function draw() {
+  ctx.clearRect(0, 0, w, h);
+  const cy = h * 0.5;
+  const slitX = w * 0.3;
+  const screenX = w * 0.9;
+
+  // Gelombang datang (animasi halus)
+  ctx.lineWidth = 3;
+  for (let i = -12; i <= 12; i++) {
+    const y = cy + i * 28;
+    const alpha = 0.2 + 0.8 * Math.exp(-Math.abs(i)/6);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(slitX - 60, y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Dua celah
+  const sepPixel = (d * 1e6); // skala besar
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(slitX - 200, 0, 400, h);
+  // celah atas
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(slitX - 30, cy - sepPixel/2 - 80, 60, 160);
+  // celah bawah
+  ctx.fillRect(slitX - 30, cy + sepPixel/2 - 80, 60, 160);
+
+  // Label d
+  ctx.fillStyle = '#60a5fa';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`d = ${dVal.textContent} mm`, slitX, cy - sepPixel/2 - 100);
+
+  // Layar
+  ctx.fillStyle = '#111';
+  ctx.fillRect(screenX - 15, 0, 30, h);
+
+  // Pola interferensi di layar
+  const scale = 300000; // agar pola terlihat bagus
+  const patternW = 800;
+  const startX = screenX - patternW/2;
+
+  for (let px = 0; px < patternW; px++) {
+    const y = (px - patternW/2) / scale * L;
+    const deltaPath = (d * y / L);           // beda lintasan
+    const phaseDiff = 2 * Math.PI * deltaPath / lambda;
+    const I = 4 * Math.cos(phaseDiff / 2) ** 2;  // intensitas normalisasi 0–4
+    const brightness = I / 4;
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.9 * brightness;
+    ctx.fillRect(startX + px, cy - 400 * brightness, 2, 800 * brightness);
+  }
+  ctx.globalAlpha = 1;
+
+  // Garis sumbu optik
+  ctx.strokeStyle = '#ffffff44';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(slitX, cy);
+  ctx.lineTo(screenX, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Label L
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(`L = ${L.toFixed(1)} m`, (slitX + screenX)/2, cy - 40);
+
+  requestAnimationFrame(draw);
+}
+
+// Event listeners
+lambdaSlider.addEventListener('input', () => {
+  lambdaVal.textContent = lambdaSlider.value;
+  update();
+});
+colorPreset.addEventListener('change', () => {
+  lambdaSlider.value = colorPreset.value;
+  lambdaVal.textContent = colorPreset.value;
+  update();
+});
+dSlider.addEventListener('input', () => {
+  dVal.textContent = dSlider.value;
+  update();
+});
+LSlider.addEventListener('input', () => {
+  LVal.textContent = LSlider.value;
+  update();
+});
+resetBtn.addEventListener('click', () => {
+  lambdaSlider.value = 650;
+  dSlider.value = 0.50;
+  LSlider.value = 2.0;
+  colorPreset.value = 650;
+  lambdaVal.textContent = "650";
+  dVal.textContent = "0.50";
+  LVal.textContent = "2.00";
+  update();
+});
+
+// Init
+update();
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MATHGEBRA - Grafik Fungsi Matematika</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.2/math.min.js"></script>
+  <style>
+    canvas { touch-action: none; }
+    input, textarea { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  </style>
+</head>
+<body class="h-full bg-gray-900 text-white">
+
+<div class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">MATHGEBRA <span class="text-cyan-400 text-lg">v2.0</span></h1>
+      <p class="text-gray-400">GeoGebra Matematika — Ketik rumus → langsung muncul grafik</p>
+    </div>
+    <div class="flex gap-3">
+      <button id="addFunc" class="bg-cyan-600 hover:bg-cyan-500 px-6 py-2 rounded-lg font-medium">+ Fungsi Baru</button>
+      <button id="clearAll" class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-medium">Clear All</button>
+    </div>
+  </header>
+
+  <div class="flex-1 flex flex-col lg:flex-row">
+    <!-- Sidebar Fungsi -->
+    <aside class="bg-gray-800 w-full lg:w-96 p-6 space-y-5 overflow-y-auto">
+      <div id="functionsList" class="space-y-4"></div>
+
+      <!-- Slider Zoom & Pan -->
+      <div class="bg-gray-700 rounded-lg p-5 space-y-4 mt-8">
+        <h3 class="font-bold text-lg text-cyan-400">Zoom & Panning</h3>
+        <label>Zoom: <span id="zoomVal">100</span>%
+          <input type="range" id="zoom" min="20" max="300" value="100" class="w-full">
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <button id="panLeft" class="bg-gray-600 hover:bg-gray-500 py-2 rounded">Pan Left</button>
+          <button id="panRight" class="bg-gray-600 hover:bg-gray-500 py-2 rounded">Pan Right</button>
+          <button id="panUp" class="bg-gray-600 hover:bg-gray-500 py-2 rounded">Pan Up</button>
+          <button id="panDown" class="bg-gray-600 hover:bg-gray-500 py-2 rounded">Pan Down</button>
+        </div>
+        <button id="resetView" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded font-medium">Reset View</button>
+      </div>
+    </aside>
+
+    <!-- Area Grafik -->
+    <main class="flex-1 bg-gradient-to-br from-gray-950 to-black relative overflow-hidden">
+      <canvas id="canvas" class="w-full h-full"></canvas>
+      
+      <!-- Koordinat Mouse -->
+      <div id="mouseCoords" class="absolute top-4 right-4 bg-black bg-opacity-80 px-4 py-3 rounded-lg text-sm font-mono">
+        x: 0.00<br>y: 0.00
+      </div>
+
+      <!-- Legenda -->
+      <div class="absolute bottom-4 left-4 bg-black bg-opacity-70 rounded-lg p-4 text-xs space-y-1">
+        <div class="text-cyan-400 font-medium">Tips:</div>
+        <div>• Gunakan x sebagai variabel</div>
+        <div>• Contoh: sin(x), x^2 + 2*x + 1, ln(x), e^x</div>
+        <div>• Bisa pakai parameter: a*x^2 (ubah nilai a di slider nanti)</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+function resize() {
+  w = canvas.width = canvas.clientWidth;
+  h = canvas.height = canvas.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// State grafik
+let functions = [];
+let zoom = 100;
+let panX = 0, panY = 0;
+
+// Scope math
+const scope = { x: 0, a: 1, b: 0, c: 0, pi: Math.PI, e: Math.E };
+
+// Tambah fungsi baru
+function addFunction(color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'), expr = 'x') {
+  const id = Date.now();
+  const div = document.createElement('div');
+  div.className = 'bg-gray-700 rounded-lg p-4 space-y-3 border border-gray-600';
+  div.innerHTML = `
+    <div class="flex items-center gap-3">
+      <input type="color" value="${color}" class="w-10 h-10 rounded cursor-pointer">
+      <input type="text" value="f(x) =" class="bg-gray-600 px-3 py-1 rounded text-sm flex-1" placeholder="Label">
+      <button class="text-red-400 hover:text-red-300 text-xl">×</button>
+    </div>
+    <textarea class="w-full bg-gray-900 text-cyan-300 rounded px-4 py-3 font-mono" rows="2">${expr}</textarea>
+    <label class="flex items-center gap-3 text-sm">
+      <input type="checkbox" checked> Tampilkan
+    </label>
+  `;
+  div.querySelector('button').onclick = () => {
+    div.remove();
+    functions = functions.filter(f => f.id !== id);
+  };
+  document.getElementById('functionsList').appendChild(div);
+  functions.push({
+    id,
+    color: div.querySelector('input[type=color]'),
+    label: div.querySelector('input[type=text]'),
+    textarea: div.querySelector('textarea'),
+    visible: div.querySelector('input[type=checkbox]')
+  });
+}
+
+// Preset fungsi awal
+addFunction('#06b6d4', 'x^2 - 4*x + 3');
+addFunction('#f97316', 'sin(x)');
+addFunction('#10b981', '2^x');
+
+// Event
+document.getElementById('addFunc').onclick = () => addFunction();
+document.getElementById('clearAll').onclick = () => {
+  document.getElementById('functionsList').innerHTML = '';
+  functions = [];
+  addFunction('#06b6d4', 'x');
+};
+document.getElementById('zoom').oninput = e => {
+  zoom = +e.target.value;
+  document.getElementById('zoomVal').textContent = zoom;
+};
+document.getElementById('resetView').onclick = () => {
+  zoom = 100;
+  panX = panY = 0;
+  document.getElementById('zoom').value = 100;
+  document.getElementById('zoomVal').textContent = '100';
+};
+document.getElementById('panLeft').onclick = () => panX -= 1;
+document.getElementById('panRight').onclick = () => panX += 1;
+document.getElementById('panUp').onclick = () => panY += 1;
+document.getElementById('panDown').onclick = () => panY -= 1;
+
+// Gambar grafik
+function draw() {
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, w, h);
+
+  const scale = zoom / 100 * 40; // 40 px per unit saat zoom 100%
+
+  // Grid
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1;
+  for (let i = -w; i < w*2; i += scale) {
+    const x = w/2 + (i - panX * scale);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let i = -h; i < h*2; i += scale) {
+    const y = h/2 + (i - panY * scale);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  // Sumbu X dan Y
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, h/2 - panY*scale); ctx.lineTo(w, h/2 - panY*scale);
+  ctx.moveTo(w/2 + panX*scale, 0); ctx.lineTo(w/2 + panX*scale, h);
+  ctx.stroke();
+
+  // Gambar semua fungsi
+  functions.forEach(f => {
+    if (!f.visible.checked) return;
+    const expr = f.textarea.value.trim();
+    if (!expr) return;
+
+    ctx.strokeStyle = f.color.value;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    let first = true;
+
+    for (let px = 0; px < w; px += 2) {
+      const xVal = (px - w/2 - panX*scale) / scale;
+      scope.x = xVal;
+
+      try {
+        const yVal = math.evaluate(expr, scope);
+        if (!isFinite(yVal)) continue;
+        const py = h/2 - (yVal - panY) * scale;
+
+        if (first) { ctx.moveTo(px, py); first = false; }
+        else ctx.lineTo(px, py);
+      } catch (e) {}
+    }
+    ctx.stroke();
+  });
+
+  requestAnimationFrame(draw);
+}
+
+// Mouse koordinat
+canvas.onmousemove = e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const scale = zoom / 100 * 40;
+  const x = ((mx - w/2 - panX*scale) / scale).toFixed(3);
+  const y = ((h/2 - my - panY*scale) / scale).toFixed(3);
+  document.getElementById('mouseCoords').innerHTML = `x: ${x}<br>y: ${y}`;
+};
+
+draw();
+</script>
+</body>
+</html>
